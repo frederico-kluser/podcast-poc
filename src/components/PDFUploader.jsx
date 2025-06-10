@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Configurar worker do PDF.js
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Configurar worker do PDF.js - usar arquivo local
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
 export function PDFUploader({ onTextExtracted }) {
   const [loading, setLoading] = useState(false);
