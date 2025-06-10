@@ -9,6 +9,8 @@ import {
   Spinner,
 } from '@material-tailwind/react'
 import { SparklesIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
+import { ChatOpenAI } from '@langchain/openai'
+import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 
 function App() {
   const [extractedText, setExtractedText] = useState('')
@@ -27,12 +29,39 @@ function App() {
     setIsLoading(true)
     setGptResponse('')
     
-    // TODO: Implementar chamada para API do ChatGPT
-    // Por enquanto, vamos simular uma resposta
-    setTimeout(() => {
-      setGptResponse('Esta é uma resposta simulada do ChatGPT. A integração real com a API será implementada em breve.')
+    try {
+      // Inicializar o modelo ChatGPT-4
+      const model = new ChatOpenAI({
+        openAIApiKey: import.meta.env.VITE_OPENAI_API_KEY,
+        modelName: 'gpt-4.1', // Usando GPT-4 Turbo mais recente
+        temperature: 0,
+        streaming: true,
+      })
+
+      // Criar as mensagens para o contexto
+      const messages = [
+        new SystemMessage(`Você é um assistente útil. Aqui está o contexto do documento PDF extraído:\n\n${extractedText.substring(0, 3000)}...`),
+        new HumanMessage(prompt)
+      ]
+
+      // Fazer a chamada com streaming
+      const stream = await model.stream(messages)
+      
+      let fullResponse = ''
+      for await (const chunk of stream) {
+        const content = chunk.content
+        if (typeof content === 'string') {
+          fullResponse += content
+          setGptResponse(fullResponse)
+        }
+      }
+      
+    } catch (error) {
+      console.error('Erro ao chamar ChatGPT:', error)
+      setGptResponse('Erro ao processar sua solicitação. Por favor, tente novamente.')
+    } finally {
       setIsLoading(false)
-    }, 2000)
+    }
   }
 
   return (
@@ -111,7 +140,13 @@ function App() {
                     <Textarea
                       label="Digite seu prompt"
                       value={prompt}
-                      onChange={(e) => setPrompt(e.target.value)}
+                      onChange={(e) => {
+                        setPrompt(e.target.value)
+                        // Limpar resposta anterior ao começar a digitar novo prompt
+                        if (gptResponse && e.target.value !== prompt) {
+                          setGptResponse('')
+                        }
+                      }}
                       rows={4}
                       className="!border-t-blue-gray-200 focus:!border-t-gray-900"
                       labelProps={{
