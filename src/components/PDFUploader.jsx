@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Enhanced PDF uploader component with drag & drop functionality
+ * @deprecated Use the refactored version in /features/PDFUploader.jsx
+ */
+
 import { useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import {
