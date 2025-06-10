@@ -11,9 +11,6 @@ import { ExtractedTextDisplay } from './components/features/ExtractedTextDisplay
 import { ChatInterface } from './components/features/ChatInterface';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 
-// Hooks
-import { usePDF } from './hooks/usePDF';
-
 /**
  * Main application component for the Podcast POC
  * Handles PDF upload, text extraction, and ChatGPT interaction
@@ -23,7 +20,7 @@ import { usePDF } from './hooks/usePDF';
  */
 function App() {
   const [errorMessage, setErrorMessage] = useState('');
-  const { extractedText, clearText } = usePDF();
+  const [extractedText, setExtractedText] = useState(null);
 
   /**
    * Handle text extraction completion
@@ -35,6 +32,8 @@ function App() {
       wordCount: textData.content.split(/\s+/).length,
       extractedAt: textData.extractedAt
     });
+    console.log('Extracted content:', textData.content); // Log do conteúdo extraído
+    setExtractedText(textData); // Armazena o texto extraído
     setErrorMessage(''); // Clear any previous errors
   }, []);
 
@@ -42,9 +41,9 @@ function App() {
    * Handle application reset
    */
   const handleReset = useCallback(() => {
-    clearText();
+    setExtractedText(null);
     setErrorMessage('');
-  }, [clearText]);
+  }, []);
 
   /**
    * Handle error messages from child components
