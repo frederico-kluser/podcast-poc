@@ -7,6 +7,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 export function PDFUploader({ onTextExtracted }) {
   const [loading, setLoading] = useState(false);
   const [fileName, setFileName] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
 
   const extractTextFromPDF = async (file) => {
     setLoading(true);
@@ -55,6 +56,30 @@ export function PDFUploader({ onTextExtracted }) {
     }
   };
 
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    const files = Array.from(e.dataTransfer.files);
+    const pdfFile = files.find(file => file.type === 'application/pdf');
+    
+    if (pdfFile) {
+      extractTextFromPDF(pdfFile);
+    } else {
+      alert('Por favor, arraste apenas arquivos PDF');
+    }
+  };
+
   return (
     <div className="w-full max-w-md mx-auto p-6 bg-white rounded-lg shadow-md">
       <label className="block">
@@ -91,6 +116,40 @@ export function PDFUploader({ onTextExtracted }) {
           ✓ {fileName} carregado com sucesso!
         </p>
       )}
+      
+      {/* Área de drag and drop */}
+      <div
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={`mt-4 border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+          isDragging 
+            ? 'border-blue-500 bg-blue-50' 
+            : 'border-gray-300 hover:border-gray-400'
+        }`}
+      >
+        <svg 
+          className="mx-auto h-12 w-12 text-gray-400 mb-3" 
+          fill="none" 
+          stroke="currentColor" 
+          viewBox="0 0 24 24"
+        >
+          <path 
+            strokeLinecap="round" 
+            strokeLinejoin="round" 
+            strokeWidth={2} 
+            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" 
+          />
+        </svg>
+        <p className="text-sm text-gray-600">
+          {isDragging 
+            ? 'Solte o arquivo aqui...' 
+            : 'Arraste e solte um arquivo PDF aqui'}
+        </p>
+        <p className="text-xs text-gray-500 mt-1">
+          ou use o botão acima para selecionar
+        </p>
+      </div>
     </div>
   );
 }
