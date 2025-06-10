@@ -24,8 +24,26 @@ export function PDFUploader({ onTextExtracted }) {
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
-        const pageText = textContent.items.map(item => item.str).join(' ');
-        fullText += pageText + '\n';
+        
+        // Agrupar items por linha baseado na posição Y
+        const lines = {};
+        textContent.items.forEach(item => {
+          const y = Math.round(item.transform[5]);
+          if (!lines[y]) lines[y] = [];
+          lines[y].push(item);
+        });
+        
+        // Ordenar linhas e concatenar texto
+        const sortedLines = Object.keys(lines).sort((a, b) => b - a);
+        const pageText = sortedLines.map(y => {
+          return lines[y]
+            .sort((a, b) => a.transform[4] - b.transform[4])
+            .map(item => item.str)
+            .join('')
+            .trim();
+        }).filter(line => line).join('\n');
+        
+        fullText += pageText + '\n\n';
       }
 
       onTextExtracted(fullText);
