@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@heroicons/react": "^2.2.0",
     "@langchain/community": "^0.3.45",
     "@langchain/openai": "^0.5.12",
     "@material-tailwind/react": "^2.1.10",

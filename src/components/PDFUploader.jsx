@@ -1,5 +1,15 @@
 import { useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
+import {
+  Card,
+  CardBody,
+  Typography,
+  Button,
+  Spinner,
+  Alert,
+} from '@material-tailwind/react';
+import { DocumentIcon, CloudArrowUpIcon } from '@heroicons/react/24/outline';
+import { CheckCircleIcon } from '@heroicons/react/24/solid';
 
 // Configurar worker do PDF.js - usar arquivo local
 pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
@@ -81,40 +91,62 @@ export function PDFUploader({ onTextExtracted }) {
   };
 
   return (
-    <div className="w-full max-w-md mx-auto p-6 bg-white rounded-lg shadow-md">
-      <label className="block">
-        <span className="text-gray-700 font-semibold mb-2 block">
-          Upload do PDF
-        </span>
-        <input
-          type="file"
-          accept=".pdf"
-          onChange={(e) => {
-            const file = e.target.files[0];
-            if (file) extractTextFromPDF(file);
-          }}
-          className="block w-full text-sm text-gray-500
-            file:mr-4 file:py-2 file:px-4
-            file:rounded-full file:border-0
-            file:text-sm file:font-semibold
-            file:bg-blue-50 file:text-blue-700
-            hover:file:bg-blue-100
-            cursor-pointer"
-          disabled={loading}
-        />
-      </label>
+    <Card className="w-full max-w-lg mx-auto">
+      <CardBody className="p-8">
+        <div className="flex items-center gap-3 mb-6">
+          <DocumentIcon className="h-8 w-8 text-blue-500" />
+          <Typography variant="h4" color="blue-gray">
+            Upload de PDF
+          </Typography>
+        </div>
+        
+        <label className="block">
+          <input
+            type="file"
+            accept=".pdf"
+            onChange={(e) => {
+              const file = e.target.files[0];
+              if (file) extractTextFromPDF(file);
+            }}
+            className="hidden"
+            disabled={loading}
+            id="pdf-upload"
+          />
+          <Button
+            variant="gradient"
+            color="blue"
+            size="lg"
+            className="flex items-center gap-3 w-full justify-center"
+            onClick={() => document.getElementById('pdf-upload').click()}
+            disabled={loading}
+          >
+            <CloudArrowUpIcon className="h-5 w-5" />
+            Selecionar arquivo PDF
+          </Button>
+        </label>
       
       {loading && (
-        <div className="mt-4 text-center">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-          <p className="mt-2 text-sm text-gray-600">Extraindo texto...</p>
+        <div className="mt-6 flex flex-col items-center gap-3">
+          <Spinner className="h-10 w-10" color="blue" />
+          <Typography color="gray" className="text-sm">
+            Extraindo texto do PDF...
+          </Typography>
         </div>
       )}
       
       {fileName && !loading && (
-        <p className="mt-4 text-sm text-green-600">
-          ✓ {fileName} carregado com sucesso!
-        </p>
+        <Alert
+          color="green"
+          icon={<CheckCircleIcon className="h-5 w-5" />}
+          className="mt-6"
+        >
+          <Typography className="font-medium">
+            PDF carregado com sucesso!
+          </Typography>
+          <Typography color="green" className="text-sm font-normal opacity-80">
+            {fileName}
+          </Typography>
+        </Alert>
       )}
       
       {/* Área de drag and drop */}
@@ -122,34 +154,35 @@ export function PDFUploader({ onTextExtracted }) {
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`mt-4 border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+        className={`mt-6 border-2 border-dashed rounded-xl p-12 text-center transition-all duration-300 ${
           isDragging 
-            ? 'border-blue-500 bg-blue-50' 
-            : 'border-gray-300 hover:border-gray-400'
+            ? 'border-blue-400 bg-blue-50 scale-105' 
+            : 'border-gray-300 hover:border-gray-400 bg-gray-50'
         }`}
       >
-        <svg 
-          className="mx-auto h-12 w-12 text-gray-400 mb-3" 
-          fill="none" 
-          stroke="currentColor" 
-          viewBox="0 0 24 24"
+        <CloudArrowUpIcon 
+          className={`mx-auto h-16 w-16 mb-4 transition-colors ${
+            isDragging ? 'text-blue-500' : 'text-gray-400'
+          }`}
+        />
+        <Typography
+          variant="h6"
+          color={isDragging ? 'blue' : 'blue-gray'}
+          className="mb-2"
         >
-          <path 
-            strokeLinecap="round" 
-            strokeLinejoin="round" 
-            strokeWidth={2} 
-            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" 
-          />
-        </svg>
-        <p className="text-sm text-gray-600">
           {isDragging 
-            ? 'Solte o arquivo aqui...' 
-            : 'Arraste e solte um arquivo PDF aqui'}
-        </p>
-        <p className="text-xs text-gray-500 mt-1">
-          ou use o botão acima para selecionar
-        </p>
+            ? 'Solte o arquivo aqui' 
+            : 'Arraste seu PDF aqui'}
+        </Typography>
+        <Typography
+          variant="small"
+          color="gray"
+          className="font-normal"
+        >
+          ou clique no botão acima para selecionar
+        </Typography>
       </div>
-    </div>
+      </CardBody>
+    </Card>
   );
 }
