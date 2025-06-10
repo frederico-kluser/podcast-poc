@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { PDFUploader } from './components/PDFUploader'
 import {
   Card,
@@ -7,8 +7,9 @@ import {
   Button,
   Textarea,
   Spinner,
+  IconButton,
 } from '@material-tailwind/react'
-import { SparklesIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
+import { SparklesIcon, ArrowPathIcon, MicrophoneIcon, StopIcon } from '@heroicons/react/24/outline'
 import { ChatOpenAI } from '@langchain/openai'
 import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 
@@ -17,6 +18,11 @@ function App() {
   const [prompt, setPrompt] = useState('')
   const [gptResponse, setGptResponse] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
+  const [isTranscribing, setIsTranscribing] = useState(false)
+  
+  const mediaRecorderRef = useRef(null)
+  const audioChunksRef = useRef([])
 
   const handleTextExtracted = (text) => {
     setExtractedText(text)
@@ -61,6 +67,73 @@ function App() {
       setGptResponse('Erro ao processar sua solicitação. Por favor, tente novamente.')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      mediaRecorderRef.current = new MediaRecorder(stream)
+      audioChunksRef.current = []
+
+      mediaRecorderRef.current.ondataavailable = (event) => {
+        audioChunksRef.current.push(event.data)
+      }
+
+      mediaRecorderRef.current.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
+        await transcribeAudio(audioBlob)
+        
+        // Parar todas as tracks do stream
+        stream.getTracks().forEach(track => track.stop())
+      }
+
+      mediaRecorderRef.current.start()
+      setIsRecording(true)
+    } catch (error) {
+      console.error('Erro ao acessar microfone:', error)
+      alert('Erro ao acessar o microfone. Verifique as permissões.')
+    }
+  }
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop()
+      setIsRecording(false)
+    }
+  }
+
+  const transcribeAudio = async (audioBlob) => {
+    setIsTranscribing(true)
+    
+    try {
+      // Criar FormData para enviar o arquivo
+      const formData = new FormData()
+      formData.append('file', audioBlob, 'audio.webm')
+      formData.append('model', 'whisper-1')
+      formData.append('language', 'pt')
+
+      // Chamar API do OpenAI Whisper diretamente
+      const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
+        },
+        body: formData
+      })
+
+      if (!response.ok) {
+        throw new Error('Erro na transcrição')
+      }
+
+      const data = await response.json()
+      setPrompt(data.text)
+      
+    } catch (error) {
+      console.error('Erro ao transcrever áudio:', error)
+      alert('Erro ao transcrever o áudio. Tente novamente.')
+    } finally {
+      setIsTranscribing(false)
     }
   }
 
@@ -135,6 +208,16 @@ function App() {
                     </div>
                   )}
                   
+                  {/* Recording indicator */}
+                  {isRecording && (
+                    <div className="mb-4 flex items-center justify-center gap-2 text-red-500">
+                      <div className="h-3 w-3 bg-red-500 rounded-full animate-pulse" />
+                      <Typography className="text-sm font-medium">
+                        Gravando... Clique em parar quando terminar
+                      </Typography>
+                    </div>
+                  )}
+                  
                   {/* Input do prompt */}
                   <div className="space-y-4">
                     <Textarea
@@ -155,15 +238,41 @@ function App() {
                       placeholder="Ex: Resuma os principais pontos deste texto..."
                       disabled={isLoading}
                     />
-                    <Button
-                      onClick={handleSubmitPrompt}
-                      disabled={!prompt.trim() || isLoading}
-                      className="w-full flex items-center justify-center gap-2"
-                      color="blue"
-                    >
-                      <SparklesIcon className="h-5 w-5" />
-                      Enviar para ChatGPT
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={handleSubmitPrompt}
+                        disabled={!prompt.trim() || isLoading || isTranscribing}
+                        className="flex-1 flex items-center justify-center gap-2"
+                        color="blue"
+                      >
+                        <SparklesIcon className="h-5 w-5" />
+                        Enviar para ChatGPT
+                      </Button>
+                      
+                      {!isRecording ? (
+                        <IconButton
+                          onClick={startRecording}
+                          disabled={isLoading || isTranscribing}
+                          color="blue"
+                          variant="outlined"
+                          className="shrink-0"
+                        >
+                          {isTranscribing ? (
+                            <Spinner className="h-5 w-5" />
+                          ) : (
+                            <MicrophoneIcon className="h-5 w-5" />
+                          )}
+                        </IconButton>
+                      ) : (
+                        <IconButton
+                          onClick={stopRecording}
+                          color="red"
+                          className="shrink-0 animate-pulse"
+                        >
+                          <StopIcon className="h-5 w-5" />
+                        </IconButton>
+                      )}
+                    </div>
                   </div>
                 </CardBody>
               </Card>
