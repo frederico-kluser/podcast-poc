@@ -162,7 +162,7 @@ export function ChatInterface({ context = '', onError }) {
         {/* Input section */}
         <div className="space-y-4">
           <Textarea
-            label="Digite seu prompt"
+            // label="Digite seu prompt"
             value={prompt}
             onChange={handlePromptChange}
             onKeyDown={handleKeyPress}
