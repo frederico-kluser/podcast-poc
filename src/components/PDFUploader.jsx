@@ -57,6 +57,7 @@ export function PDFUploader({ onTextExtracted }) {
         fullText += pageText + '\n\n';
       }
 
+      console.log('Texto extraído:', fullText);
       onTextExtracted(fullText);
     } catch (error) {
       console.error('Erro ao extrair texto:', error);
