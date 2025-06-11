@@ -111,8 +111,11 @@ export class PDFService {
         }
       }
 
+      const finalText = fullText.trim();
+      console.log('📄 Texto extraído do PDF:', finalText);
+      
       return {
-        content: fullText.trim(),
+        content: finalText,
         pageCount: pdf.numPages,
         extractedAt: new Date()
       };
@@ -154,6 +157,8 @@ export class PDFService {
         });
       }
 
+      console.log('📄 Texto extraído do PDF (pdf-parse):', data.text);
+      
       return {
         content: data.text,
         pageCount: data.numpages,
