@@ -14,7 +14,7 @@ export class HighQualityRAGService {
     this.config = {
       embeddingModel: 'text-embedding-3-large',
       embeddingDimensions: 3072,
-      chatModel: 'gpt-4-turbo-preview',
+      chatModel: 'gpt-4o-mini', // Updated to current available model
       chunkSize: 800,
       chunkOverlap: 200,
       temperature: 0.2,
@@ -54,19 +54,12 @@ export class HighQualityRAGService {
         id: 'string',
         text: 'string',
         embedding: `vector[${this.config.embeddingDimensions}]`,
-        metadata: {
-          pageNumber: 'number',
-          source: 'string',
-          chunkIndex: 'number',
-          totalTokens: 'number',
-          importance: 'number',
-          hash: 'string' // Para cache
-        }
-      },
-      components: {
-        tokenizer: {
-          language: 'portuguese' // Otimizado para português
-        }
+        pageNumber: 'number',
+        source: 'string', 
+        chunkIndex: 'number',
+        totalTokens: 'number',
+        importance: 'number',
+        hash: 'string'
       }
     });
 
@@ -196,7 +189,12 @@ export class HighQualityRAGService {
           id: `${sourceName}_p${chunk.metadata.pageNumber}_c${chunk.metadata.chunkIndex}`,
           text: chunk.text,
           embedding: embedding,
-          metadata: chunk.metadata
+          pageNumber: chunk.metadata.pageNumber,
+          source: chunk.metadata.source,
+          chunkIndex: chunk.metadata.chunkIndex,
+          totalTokens: chunk.metadata.totalTokens,
+          importance: chunk.metadata.importance,
+          hash: chunk.metadata.hash
         });
       }
       
@@ -275,7 +273,14 @@ export class HighQualityRAGService {
     let relevantDocs = results.hits.map(hit => ({
       text: hit.document.text,
       score: hit.score,
-      metadata: hit.document.metadata
+      metadata: {
+        pageNumber: hit.document.pageNumber,
+        source: hit.document.source,
+        chunkIndex: hit.document.chunkIndex,
+        totalTokens: hit.document.totalTokens,
+        importance: hit.document.importance,
+        hash: hit.document.hash
+      }
     }));
 
     // Reranking com GPT
@@ -537,39 +542,44 @@ Example: 3,1,5,2,4`;
   async analyzeDocument() {
     if (!this.db) return null;
 
-    const allDocs = await search(this.db, {
-      term: '',
-      limit: 10000
-    });
+    try {
+      const allDocs = await search(this.db, {
+        term: '*',
+        limit: 10000
+      });
 
-    const stats = {
-      totalChunks: allDocs.hits.length,
-      totalTokens: 0,
-      averageChunkSize: 0,
-      pagesProcessed: new Set(),
-      tokenDistribution: [],
-      importanceDistribution: [],
-      uniqueHashes: new Set()
-    };
+      const stats = {
+        totalChunks: allDocs.hits.length,
+        totalTokens: 0,
+        averageChunkSize: 0,
+        pagesProcessed: new Set(),
+        tokenDistribution: [],
+        importanceDistribution: [],
+        uniqueHashes: new Set()
+      };
 
-    allDocs.hits.forEach(hit => {
-      const metadata = hit.document.metadata;
-      stats.totalTokens += metadata.totalTokens;
-      stats.pagesProcessed.add(metadata.pageNumber);
-      stats.tokenDistribution.push(metadata.totalTokens);
-      stats.importanceDistribution.push(metadata.importance);
-      stats.uniqueHashes.add(metadata.hash);
-    });
+      allDocs.hits.forEach(hit => {
+        const doc = hit.document;
+        stats.totalTokens += doc.totalTokens || 0;
+        stats.pagesProcessed.add(doc.pageNumber);
+        stats.tokenDistribution.push(doc.totalTokens || 0);
+        stats.importanceDistribution.push(doc.importance || 1);
+        stats.uniqueHashes.add(doc.hash);
+      });
 
-    stats.averageChunkSize = Math.round(stats.totalTokens / stats.totalChunks);
-    stats.pagesProcessed = stats.pagesProcessed.size;
-    stats.duplicateChunks = stats.totalChunks - stats.uniqueHashes.size;
+      stats.averageChunkSize = stats.totalChunks > 0 ? Math.round(stats.totalTokens / stats.totalChunks) : 0;
+      stats.pagesProcessed = stats.pagesProcessed.size;
+      stats.duplicateChunks = stats.totalChunks - stats.uniqueHashes.size;
 
-    // Calcular percentis
-    stats.tokenPercentiles = this.calculatePercentiles(stats.tokenDistribution);
-    stats.importancePercentiles = this.calculatePercentiles(stats.importanceDistribution);
+      // Calcular percentis
+      stats.tokenPercentiles = this.calculatePercentiles(stats.tokenDistribution);
+      stats.importancePercentiles = this.calculatePercentiles(stats.importanceDistribution);
 
-    return stats;
+      return stats;
+    } catch (error) {
+      console.error('Error analyzing document:', error);
+      return null;
+    }
   }
 
   // Utilitários
