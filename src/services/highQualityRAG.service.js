@@ -105,26 +105,32 @@ export class HighQualityRAGService {
           const page = await pdf.getPage(pageNum);
           const textContent = await page.getTextContent();
           
-          // Simple text reconstruction
-          const pageText = textContent.items
-            .map(item => item.str || '')
-            .join(' ')
-            .trim();
+          // Enhanced text reconstruction with proper spacing
+          const pageText = this.reconstructPageText(textContent);
+          
           
           if (pageText) {
             const chunks = await this.splitter.splitText(pageText);
             
-            chunks.forEach((chunk, index) => {
-              const hash = this.generateHash(chunk);
+            chunks.forEach((chunkData, index) => {
+              // Handle both string and object chunks
+              const chunkText = typeof chunkData === 'string' ? chunkData : chunkData.text;
+              
+              if (!chunkText || typeof chunkText !== 'string') {
+                console.warn('Invalid chunk detected:', chunkData);
+                return;
+              }
+              
+              const hash = this.generateHash(chunkText);
               
               allChunks.push({
-                text: chunk,
+                text: chunkText,
                 metadata: {
                   pageNumber: pageNum,
                   chunkIndex: index,
                   source: file.name,
-                  totalTokens: this.estimateTokens(chunk),
-                  importance: this.calculateImportance(chunk, pageNum, totalPages),
+                  totalTokens: this.estimateTokens(chunkText),
+                  importance: this.calculateImportance(chunkText, pageNum, totalPages),
                   hash: hash
                 }
               });
@@ -713,6 +719,91 @@ Example: 3,1,5,2,4`;
       },
       total: (totalTokens / 1000) * 0.00013
     };
+  }
+
+  // Reconstituir texto da página com melhor qualidade
+  reconstructPageText(textContent) {
+    if (!textContent || !textContent.items || !Array.isArray(textContent.items)) {
+      return '';
+    }
+
+    const lines = {};
+    
+    // Group text items by Y position (line)
+    textContent.items.forEach(item => {
+      if (!item.transform || !item.str) return;
+      
+      const y = Math.round(item.transform[5]); // Y position
+      const x = Math.round(item.transform[4]); // X position
+      
+      if (!lines[y]) lines[y] = [];
+      lines[y].push({
+        x: x,
+        text: item.str,
+        width: item.width || 0
+      });
+    });
+    
+    // Sort lines by Y position (top to bottom)
+    const sortedLines = Object.keys(lines)
+      .sort((a, b) => b - a) // Descending (top to bottom)
+      .map(y => {
+        // Sort items in each line by X position (left to right)
+        const lineItems = lines[y].sort((a, b) => a.x - b.x);
+        
+        // Reconstruct line with proper spacing
+        let lineText = '';
+        let lastX = -1;
+        
+        lineItems.forEach((item, index) => {
+          if (index === 0) {
+            lineText = item.text;
+          } else {
+            // Calculate spacing based on X position difference
+            const spacing = item.x - (lastX + (lineItems[index - 1].width || 0));
+            
+            if (spacing > 10) { // Significant gap - add space
+              lineText += ' ' + item.text;
+            } else if (spacing > 2) { // Small gap - check if space needed
+              // Add space if previous text doesn't end with space and current doesn't start with punctuation
+              const needsSpace = !lineText.endsWith(' ') && 
+                               !item.text.match(/^[.,;:!?]/);
+              lineText += (needsSpace ? ' ' : '') + item.text;
+            } else {
+              // No significant gap - concatenate directly
+              lineText += item.text;
+            }
+          }
+          lastX = item.x;
+        });
+        
+        return lineText.trim();
+      })
+      .filter(line => line.length > 0);
+    
+    // Join lines and clean up
+    let fullText = sortedLines.join('\n');
+    
+    // Clean up common PDF extraction issues
+    fullText = fullText
+      // Fix broken words
+      .replace(/(\w)\s+(\w)/g, (match, p1, p2) => {
+        // If both are single characters, likely a broken word
+        if (p1.length === 1 && p2.length === 1) {
+          return p1 + p2;
+        }
+        return match;
+      })
+      // Fix multiple spaces
+      .replace(/\s{2,}/g, ' ')
+      // Fix line breaks in middle of words
+      .replace(/(\w)-\s*\n\s*(\w)/g, '$1$2')
+      // Fix sentence boundaries
+      .replace(/([.!?])\s*\n\s*([A-Z])/g, '$1 $2')
+      // Clean up extra whitespace
+      .trim();
+    
+    return fullText;
   }
 
   // Limpar recursos
