@@ -29,8 +29,7 @@ export class HighQualityRAGService {
     this.splitter = new RecursiveCharacterTextSplitter({
       chunkSize: this.config.chunkSize,
       chunkOverlap: this.config.chunkOverlap,
-      separators: ["\n\n", "\n", ". ", "! ", "? ", "; ", ": ", " ", ""],
-      lengthFunction: (text) => this.estimateTokens(text)
+      separators: ["\n\n", "\n", ". ", "! ", "? ", "; ", ": ", " ", ""]
     });
     
     // Cache de embeddings para evitar reprocessamento
