@@ -6,7 +6,7 @@
  * OpenAI API configuration
  */
 export const OPENAI_CONFIG = {
-  CHAT_MODEL: 'gpt-4.1',
+  CHAT_MODEL: 'gpt-4-turbo-preview',
   WHISPER_MODEL: 'whisper-1',
   TEMPERATURE: 0,
   MAX_TOKENS: 4000,
@@ -26,7 +26,7 @@ export const API_ENDPOINTS = {
 export const PDF_CONFIG = {
   MAX_FILE_SIZE: 10 * 1024 * 1024, // 10MB
   ACCEPTED_TYPES: ['application/pdf'],
-  WORKER_SRC: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.3.31/build/pdf.worker.min.mjs',
+  WORKER_SRC: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js',
   MAX_TEXT_PREVIEW: 1000,
   MAX_CONTEXT_LENGTH: 3000,
 };

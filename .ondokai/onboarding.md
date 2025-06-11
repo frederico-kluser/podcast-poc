@@ -1,48 +1,45 @@
-# Podcast POC - Onboarding para CLAUDE CODE
+# Podcast POC - Guia para CLAUDE CODE
+
 
 ## Visão Geral do Projeto
 
 <project-info>
 Nome do Projeto: Podcast POC
-Descrição: CLI Node.js para gravação de voz, transcrição, text-to-speech (TTS) e processamento de IA. Aplicação que permite gravação de áudio, extração de texto de PDFs, conversão de fala em texto e síntese de voz através da API da OpenAI.
-Linguagens: JavaScript (ES6+), JSX
-Frameworks: React 18.3.1, Vite 6.0.5
-Bibliotecas Principais: OpenAI API, react-pdf, Material Tailwind, Web Audio API, MediaRecorder API
-Plataforma: Web (aplicação de interface de linha de comando e processamento de áudio)
+Repositório: podcast-poc
+Descrição: Web application para geração de podcasts educacionais a partir de PDFs usando APIs OpenAI. Recursos incluem extração de texto PDF, interface de chat com IA, gravação/transcrição de áudio e capacidades de busca vetorial.
+Linguagens: JavaScript, React
+Frameworks: React 18.3.1 + Vite 6.0.5 + Material Tailwind
+Bibliotecas Principais: OpenAI API, PDF.js, MediaRecorder API
+Plataforma: Web (navegador moderno com suporte a Web Workers)
 </project-info>
 
 ## Comandos Essenciais
 
 ```bash
 # Instalação e setup
-npm install                  # Instalar todas as dependências do projeto
-npm ci                       # Instalação limpa baseada no package-lock.json
+npm install                  # Instalar todas as dependências
+# Configurar VITE_OPENAI_API_KEY no .env.local
 
 # Build
-npm run dev                  # Iniciar servidor de desenvolvimento com Vite (hot reload)
-npm run build                # Build de produção otimizado
+npm run build                # Build para produção
 npm run preview              # Visualizar build de produção localmente
 
 # Testes
-# Nota: Não há scripts de teste configurados ainda
+# Testes ainda não implementados - TODO: configurar Jest/Vitest
 
 # Lint e Verificação de Tipos
-npm run lint                 # Executar ESLint em todos os arquivos JS/JSX
-# Não há script de formatação configurado (considerar adicionar Prettier)
+npm run lint                 # Executar ESLint para verificar código
+# TypeScript não configurado - projeto usa JavaScript
 
 # Execução
-npm run dev                  # Servidor de desenvolvimento na porta 5173
-npm run preview              # Servidor de preview após build
+npm run dev                  # Iniciar servidor de desenvolvimento (http://localhost:5173)
+npm run preview              # Executar preview da build de produção
 
-# Ambiente
-# Criar arquivo .env.local com:
-VITE_OPENAI_API_KEY=sua_chave_aqui
 
-# Git (convenções do projeto)
+# Git
 git checkout development     # Branch de desenvolvimento ativo
-git checkout -b feature/nome # Criar nova feature
-git add .                    # Adicionar mudanças
-git commit -m "tipo: descrição"  # Formato de commit
+git checkout -b feature/nome # Criar branch de feature
+git commit -m "tipo: desc"   # Formato: feat/fix/docs/refactor/chore
 ```
 
 ## Arquitetura do Sistema
@@ -50,127 +47,47 @@ git commit -m "tipo: descrição"  # Formato de commit
 <architecture>
 ### Arquitetura Funcional e Modular
 
-O projeto utiliza uma arquitetura modular organizada em 7 módulos principais que fornecem funcionalidades específicas e bem definidas:
+O Podcast POC é estruturado em uma arquitetura modular com os seguintes módulos principais que trabalham de forma integrada:
 
-#### 1. **Módulo de Interface do Usuário (UI)**
-- **Responsabilidade**: Gerenciar toda a interação visual com o usuário
-- **Componentes principais**:
-  - `ChatInterface.jsx`: Interface de chat para interação com IA
-  - `PDFUploader.jsx`: Upload e processamento de arquivos PDF
-  - `ExtractedTextDisplay.jsx`: Exibição de texto extraído
-  - `ErrorBoundary.jsx`: Tratamento de erros na interface
-- **Tecnologias**: React, Material Tailwind, CSS Modules
 
-#### 2. **Módulo de Processamento de Áudio**
-- **Responsabilidade**: Captura, gravação e manipulação de áudio
-- **Componentes principais**:
-  - `audio.service.js`: Serviço principal de áudio
-  - `useAudioRecording.js`: Hook para gravação de áudio
-- **Tecnologias**: Web Audio API, MediaRecorder API
-- **Funcionalidades**: Gravação de voz, conversão de formato, controle de qualidade
+### Padrões de Design Utilizados
 
-#### 3. **Módulo de Integração com OpenAI**
-- **Responsabilidade**: Comunicação com a API da OpenAI
-- **Componentes principais**:
-  - `openai.service.js`: Serviço de integração com OpenAI
-  - `useOpenAI.js`: Hook para funcionalidades de IA
-- **Funcionalidades**: Transcrição (STT), síntese de voz (TTS), chat completions
+1. **Service Layer Pattern**: Lógica de negócio isolada em serviços
+2. **Custom Hooks Pattern**: Encapsulamento de lógica stateful reutilizável
+3. **Component Composition**: Componentes modulares e compostos
+4. **Error Boundary Pattern**: Tratamento robusto de erros
+5. **Worker Pattern**: Processamento pesado em Web Workers
 
-#### 4. **Módulo de Processamento de Documentos**
-- **Responsabilidade**: Extração e manipulação de conteúdo de PDFs
-- **Componentes principais**:
-  - `pdf.service.js`: Serviço de processamento de PDF
-  - `usePDF.js`: Hook para operações com PDF
-- **Tecnologias**: react-pdf, PDF.js
-- **Funcionalidades**: Extração de texto, parsing de estrutura
+### Fluxo de Dados Principal
 
-#### 5. **Módulo de Gerenciamento de Estado**
-- **Responsabilidade**: Controle do estado global da aplicação
-- **Implementação**: React Hooks (useState, useEffect)
-- **Estados gerenciados**:
-  - Texto extraído de PDFs
-  - Histórico de conversas
-  - Estado de gravação de áudio
-  - Configurações do usuário
+```
+1. Upload PDF → Web Worker → Extração de Texto
+2. Texto → Text Splitter → Chunks
+3. User Query + Context → OpenAI API
+4. Streaming Response → UI Update
+5. Audio Recording → Whisper → Query Text
+```
 
-#### 6. **Módulo de Utilidades**
-- **Responsabilidade**: Funções auxiliares e helpers
-- **Componentes**:
-  - `format.js`: Formatação de dados
-  - `validation.js`: Validação de entradas
-  - `constants/index.js`: Constantes globais
+### Comunicação Entre Módulos
 
-#### 7. **Módulo de Configuração e Build**
-- **Responsabilidade**: Configuração do ambiente e build
-- **Arquivos principais**:
-  - `vite.config.js`: Configuração do Vite
-  - `tailwind.config.js`: Configuração do Tailwind CSS
-  - `eslint.config.js`: Configuração de linting
-  - `package.json`: Dependências e scripts
-
-### Fluxo de Dados
-
-1. **Entrada de Dados**:
-   - Upload de PDF → Módulo de Documentos → Extração de texto
-   - Gravação de áudio → Módulo de Áudio → Buffer de áudio
-
-2. **Processamento**:
-   - Texto/Áudio → Módulo OpenAI → Transcrição/Resposta
-   - Resposta → Módulo de Estado → Atualização da UI
-
-3. **Saída**:
-   - Texto processado → Módulo UI → Exibição ao usuário
-   - Áudio sintetizado → Módulo de Áudio → Reprodução
-
-### Comunicação entre Módulos
-
-- **Padrão de comunicação**: Baseado em Promises e callbacks
-- **Gerenciamento de estado**: Props drilling e hooks customizados
-- **Tratamento de erros**: Try-catch blocks e error boundaries
-- **Eventos**: Event listeners nativos do browser para áudio
+- **Event-driven**: Callbacks e promises para operações assíncronas
+- **State Management**: React hooks para estado local
+- **Service Calls**: Funções puras nos serviços para processamento
+- **Streaming**: Server-sent events para respostas em tempo real
 
 ### Integrações Externas
 
-- **OpenAI API**: Autenticação via API key, comunicação REST
-- **PDF.js Worker**: Processamento assíncrono de PDFs em web worker
-- **Browser APIs**: MediaRecorder, Web Audio API, File API
+1. **OpenAI API**: Chat completions, Whisper transcription
+2. **PDF.js**: Renderização e extração de PDF
+3. **Material Tailwind**: Componentes UI
+4. **Web APIs**: MediaRecorder, Web Workers, Blob API
 
-### Core Modules
+### Considerações de Escalabilidade
 
-1. **Voice Recorder (PvRecorder)**
-   - Módulo de captura de áudio de alta qualidade
-   - Integração com microfone do sistema
-   - Controle de taxa de amostragem e formato de áudio
-
-2. **Transcriber (Whisper)**
-   - Transcrição de fala para texto usando OpenAI Whisper
-   - Suporte para múltiplos idiomas
-   - Processamento assíncrono de áudio
-
-3. **TTS (Text-to-Speech)**
-   - Síntese de voz usando OpenAI TTS
-   - Múltiplas vozes disponíveis
-   - Controle de velocidade e entonação
-
-4. **AI Processor**
-   - Processamento de linguagem natural
-   - Integração com modelos GPT da OpenAI
-   - Gerenciamento de contexto e histórico de conversas
-
-5. **Audio Player**
-   - Reprodução de áudio sintetizado
-   - Controles de playback (play, pause, stop)
-   - Gerenciamento de buffer de áudio
-
-6. **Key Capture**
-   - Captura de eventos de teclado
-   - Atalhos personalizáveis
-   - Integração com comandos da aplicação
-
-7. **Handlers Manager**
-   - Gerenciamento centralizado de eventos
-   - Coordenação entre módulos
-   - Tratamento de erros e exceções
+- Processamento assíncrono com Workers previne bloqueio da UI
+- Streaming de respostas reduz latência percebida
+- Modularização permite evolução independente de componentes
+- Fallbacks implementados para maior resiliência
 </architecture>
 
 ## Estrutura do Repositório
@@ -180,154 +97,75 @@ podcast-poc/
 ├── src/                     # Código fonte da aplicação
 │   ├── components/          # Componentes React organizados por tipo
 │   │   ├── features/        # Componentes de funcionalidades específicas
-│   │   │   ├── ChatInterface.jsx       # Interface de chat com IA
+│   │   │   ├── ChatInterface.jsx      # Interface de chat com IA
 │   │   │   ├── ExtractedTextDisplay.jsx # Exibição de texto extraído
-│   │   │   └── PDFUploader.jsx         # Upload e processamento de PDF
+│   │   │   └── PDFUploader.jsx        # Upload e processamento de PDF
 │   │   └── ui/              # Componentes de UI reutilizáveis
-│   │       └── ErrorBoundary.jsx       # Tratamento de erros React
-│   ├── hooks/               # Custom React hooks
-│   │   ├── useAudioRecording.js # Hook para gravação de áudio
-│   │   ├── useOpenAI.js         # Hook para integração OpenAI
-│   │   └── usePDF.js            # Hook para processamento PDF
-│   ├── services/            # Serviços e lógica de negócio
-│   │   ├── audio.service.js     # Serviço de áudio
-│   │   ├── openai.service.js    # Integração com OpenAI API
-│   │   └── pdf.service.js       # Processamento de PDF
+│   │       └── ErrorBoundary.jsx      # Tratamento global de erros
+│   ├── hooks/               # Custom hooks React
+│   │   ├── useOpenAI.js     # Hook para integração OpenAI
+│   │   ├── usePDF.js        # Hook para processamento PDF
+│   │   └── useAudioRecording.js # Hook para gravação de áudio
+│   ├── services/            # Camada de serviços (lógica de negócio)
+│   │   ├── openai.service.js    # Integração com APIs OpenAI
+│   │   ├── pdf.service.js       # Extração de texto PDF
+│   │   ├── audio.service.js     # Gravação e processamento de áudio
+│   │   ├── config.service.js    # Gerenciamento de configurações
+│   │   └── highQualityRAG.service.js # Serviço de RAG (não utilizado)
+│   ├── workers/             # Web Workers para processamento pesado
+│   │   └── pdf.worker.js    # Worker para extração de PDF
 │   ├── utils/               # Funções utilitárias
-│   │   ├── format.js            # Formatação de dados
-│   │   └── validation.js        # Validação de entradas
-│   ├── constants/           # Constantes globais
-│   │   └── index.js             # Exportação de constantes
+│   │   ├── format.js        # Formatadores de dados
+│   │   ├── textSplitter.js  # Divisão de texto em chunks
+│   │   └── validation.js    # Validações gerais
+│   ├── constants/           # Constantes da aplicação
+│   │   └── index.js         # Configurações e limites
 │   ├── App.jsx              # Componente principal
-│   ├── App.css              # Estilos do App
-│   ├── index.css            # Estilos globais
-│   └── main.jsx             # Ponto de entrada da aplicação
+│   └── main.jsx             # Ponto de entrada React
 ├── public/                  # Arquivos públicos estáticos
-│   ├── pdf.worker.min.mjs       # Worker para processamento PDF
-│   └── vite.svg                 # Logo do Vite
+│   └── pdf.worker.min.mjs   # Worker PDF.js (OBRIGATÓRIO)
 ├── docs/                    # Documentação do projeto
-│   └── Material-Tailwind-Guia-Completo.md
-├── .ondokai/                # Configurações do ambiente ondokai
-│   └── onboarding.md            # Este arquivo
-├── package.json             # Dependências e scripts npm
+├── package.json             # Dependências e scripts
 ├── vite.config.js           # Configuração do Vite
 ├── tailwind.config.js       # Configuração do Tailwind CSS
-├── postcss.config.js        # Configuração do PostCSS
 ├── eslint.config.js         # Configuração do ESLint
-├── index.html               # HTML principal
-└── README.md                # Documentação principal
+└── .env.local               # Variáveis de ambiente (não versionado)
 ```
 
 ## Convenções de Código
 
 <code-conventions>
 ### Estilo de Código
-- Indentação: 2 espaços
-- Comprimento máximo de linha: ~100 caracteres (não enforçado)
-- Quotes: Simples (') para strings
-- Ponto-e-vírgula: Obrigatório
-- Chaves: Mesma linha (estilo K&R)
-- Trailing comma: Permitido em arrays e objetos multilinhas
+- Indentação: 2 espaços (configurado no ESLint)
+- Comprimento máximo de linha: 100 caracteres (recomendado)
+- Quotes: Aspas simples para strings
+- Ponto-e-vírgula: Obrigatório no final de statements
+- Chaves: Mesma linha (estilo JavaScript moderno)
 
 ### Nomenclatura
-- Variáveis: camelCase (ex: extractedText, errorMessage)
-- Funções: camelCase (ex: handleTextExtracted, transcribeAudio)
-- Classes/Componentes: PascalCase (ex: ChatInterface, ErrorBoundary)
-- Constantes: UPPER_SNAKE_CASE (ex: API_ENDPOINTS, MAX_FILE_SIZE)
-- Arquivos de componentes: PascalCase.jsx (ex: PDFUploader.jsx)
-- Arquivos de serviços/utils: camelCase.js (ex: audio.service.js)
-- Hooks customizados: use + PascalCase (ex: useAudioRecording)
+- Variáveis: camelCase (ex: extractedText, isLoading)
+- Funções: camelCase (ex: handleSubmit, processAudio)
+- Classes: PascalCase (ex: OpenAIService, PDFProcessor)
+- Constantes: UPPER_SNAKE_CASE (ex: MAX_FILE_SIZE, API_TIMEOUT)
+- Arquivos: 
+  - Componentes: PascalCase.jsx (ex: ChatInterface.jsx)
+  - Hooks: camelCase com prefixo 'use' (ex: useOpenAI.js)
+  - Serviços: camelCase.service.js (ex: openai.service.js)
+  - Utilitários: camelCase.js (ex: textSplitter.js)
 
 ### Documentação
-- Estilo de comentários: JSDoc para funções e componentes
-- Requisitos para funções públicas: 
-  - @fileoverview no topo dos arquivos
-  - @param para todos os parâmetros
-  - @returns para retornos não óbvios
-  - @component para componentes React
-- Formato de TODOs: // TODO: descrição da tarefa
+- Estilo de comentários: JSDoc para funções públicas
+- Requisitos para funções públicas: @fileoverview, @param, @returns
+- Formato de TODOs: // TODO: [descrição] - [autor] [data]
+- Evitar comentários desnecessários - código deve ser autoexplicativo
 
 ### Padrões de Projeto
-- Composição sobre herança: Usar hooks e componentes funcionais
-- Separação de responsabilidades: 
-  - Componentes em /components (UI)
-  - Lógica de negócio em /services
-  - Hooks customizados em /hooks
-  - Utilitários em /utils
-- Error Boundaries: Usar componente ErrorBoundary para tratamento de erros
-- Estado local vs global: Preferir useState local, elevar estado quando necessário
-- Async/Await: Preferir sobre .then() para operações assíncronas
+- Service Layer Pattern: Toda lógica de negócio em arquivos .service.js
+- Custom Hooks: Lógica stateful encapsulada em hooks use*
+- Error Boundaries: Tratamento de erros em componentes wrapper
+- Composition over Inheritance: Preferir composição de componentes
+- Single Responsibility: Cada módulo/componente com uma única responsabilidade
 </code-conventions>
-
-## Best Practices de Desenvolvimento
-
-<best-practices>
-### Estrutura de Componentes
-- Manter componentes pequenos e focados em uma única responsabilidade
-- Usar desestruturação de props no parâmetro da função
-- Ordenar: imports → componente → exports
-- Exemplo de estrutura:
-  ```jsx
-  import { useState, useCallback } from 'react';
-  import { ComponenteDependente } from './ComponenteDependente';
-
-  export function MeuComponente({ prop1, prop2 }) {
-    const [estado, setEstado] = useState(valorInicial);
-    
-    const handleEvento = useCallback(() => {
-      // lógica
-    }, [dependencias]);
-    
-    return (
-      <div>
-        {/* JSX */}
-      </div>
-    );
-  }
-  ```
-
-### Gerenciamento de Estado
-- useState para estado local simples
-- useReducer para estado complexo com múltiplas atualizações
-- Elevar estado apenas quando necessário
-- Evitar prop drilling excessivo
-
-### Performance
-- Usar useCallback para funções passadas como props
-- Usar useMemo para cálculos computacionalmente caros
-- Lazy loading de componentes grandes com React.lazy()
-- Otimizar re-renders com React.memo quando apropriado
-
-### Tratamento de Erros
-- Sempre usar try-catch em operações assíncronas
-- Implementar Error Boundaries para erros de renderização
-- Logar erros no console em desenvolvimento
-- Mostrar mensagens amigáveis ao usuário
-
-### Integração com APIs
-- Centralizar chamadas de API em services
-- Usar AbortController para cancelar requests
-- Implementar retry logic para falhas temporárias
-- Validar respostas antes de usar
-
-### Segurança
-- Nunca expor API keys no código
-- Usar variáveis de ambiente com prefixo VITE_
-- Sanitizar inputs do usuário
-- Validar uploads de arquivo (tipo, tamanho)
-
-### Acessibilidade
-- Usar elementos HTML semânticos
-- Adicionar aria-labels quando necessário
-- Garantir navegação por teclado
-- Testar com screen readers
-
-### Debugging
-- Usar React DevTools para inspecionar componentes
-- Console.log com contexto descritivo
-- Breakpoints no Chrome DevTools
-- Network tab para debug de APIs
-</best-practices>
 
 ## Fluxo de Trabalho Git
 
@@ -340,7 +178,7 @@ podcast-poc/
 
 ### Commits
 - Formato de mensagem: tipo: descrição
-- Tipos aceitos: feat/fix/docs/style/refactor
+- Tipos aceitos: feat/fix/docs/refactor/chore
 </git-workflow>
 
 
@@ -355,47 +193,50 @@ podcast-poc/
 - Node.js: v18.0.0 ou superior (recomendado v20+)
 - npm: v9.0.0 ou superior
 - Git: v2.0.0 ou superior
-- Editor: VSCode recomendado (com extensões React e ESLint)
-- Browser: Chrome/Edge/Firefox moderno com DevTools
+- Editor: VSCode recomendado com extensões ESLint e Tailwind CSS IntelliSense
+- Navegador moderno com suporte a Web Workers e MediaRecorder API
 
 ### Configuração Passo a Passo
-1. Clone o repositório:
+1. Clonar o repositório:
    ```bash
-   git clone <url-do-repositorio>
+   git clone [url-do-repositorio]
    cd podcast-poc
+   git checkout development
    ```
 
-2. Instale as dependências:
+2. Instalar dependências:
    ```bash
    npm install
    ```
 
-3. Configure as variáveis de ambiente:
+3. Configurar variáveis de ambiente:
    ```bash
-   # Criar arquivo .env.local na raiz do projeto
-   echo "VITE_OPENAI_API_KEY=sua_chave_api_aqui" > .env.local
+   # Criar arquivo .env.local
+   echo "VITE_OPENAI_API_KEY=sua_chave_aqui" > .env.local
    ```
 
-4. Inicie o servidor de desenvolvimento:
+4. Verificar arquivo do worker PDF:
+   ```bash
+   # Garantir que existe em public/
+   ls public/pdf.worker.min.mjs
+   ```
+
+5. Iniciar servidor de desenvolvimento:
    ```bash
    npm run dev
+   # Acessar http://localhost:5173
    ```
 
-5. Acesse a aplicação em http://localhost:5173
-
 ### Configurações Específicas
-- VSCode: Instalar extensões
-  - ESLint
-  - Prettier (opcional)
-  - Tailwind CSS IntelliSense
-  - ES7+ React snippets
-- Chrome DevTools: Habilitar React Developer Tools
-- Git: Configurar user.name e user.email
+- VSCode: Instalar extensões ESLint, Tailwind CSS IntelliSense, ES7+ React snippets
+- Git: Configurar email e nome para commits
+- Chrome DevTools: Habilitar source maps para debugging
+- OpenAI API: Obter chave em https://platform.openai.com/api-keys
 
-### Troubleshooting Comum
-- Erro de CORS: Verificar configuração do Vite proxy
-- PDF Worker não carrega: Verificar se pdf.worker.min.mjs está em /public
-- Erro de API Key: Confirmar que .env.local está configurado corretamente
+### Containers e Virtualização
+- Docker não configurado atualmente
+- Para desenvolvimento, usar ambiente Node.js local
+- Possível containerização futura para deployment
 </dev-environment>
 
 
