@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { create, insert, search, save, load } from '@orama/orama';
-import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
+import { SimpleTextSplitter } from '../utils/textSplitter.js';
 import { ConfigService } from './config.service';
 
 export class HighQualityRAGService {
@@ -26,10 +26,10 @@ export class HighQualityRAGService {
       retryDelay: 1000
     };
 
-    this.splitter = new RecursiveCharacterTextSplitter({
+    this.splitter = new SimpleTextSplitter({
       chunkSize: this.config.chunkSize,
       chunkOverlap: this.config.chunkOverlap,
-      separators: ["\n\n", "\n", ". ", "! ", "? ", "; ", ": ", " ", ""]
+      separators: ["\n\n", "\n", ". ", "! ", "? ", "; ", ": ", " "]
     });
     
     // Cache de embeddings para evitar reprocessamento
