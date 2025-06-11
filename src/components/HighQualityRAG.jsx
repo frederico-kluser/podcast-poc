@@ -538,16 +538,25 @@ export function HighQualityRAG() {
           <div className="flex items-center justify-between mb-4">
             <Typography variant="h5">Gerenciamento de Documentos</Typography>
             {uploadedFile && (
-              <Chip 
-                value={uploadedFile.name} 
-                color="green" 
-                icon={<DocumentIcon className="h-4 w-4" />}
-                onClose={() => {
-                  if (confirm('Deseja remover este documento?')) {
-                    handleReset();
-                  }
-                }}
-              />
+              <div className="flex items-center gap-2">
+                <Chip 
+                  value={uploadedFile.name} 
+                  color="green" 
+                  icon={<DocumentIcon className="h-4 w-4" />}
+                />
+                <IconButton
+                  size="sm"
+                  variant="text"
+                  color="red"
+                  onClick={() => {
+                    if (confirm('Deseja remover este documento?')) {
+                      handleReset();
+                    }
+                  }}
+                >
+                  <XMarkIcon className="h-4 w-4" />
+                </IconButton>
+              </div>
             )}
           </div>
           
@@ -791,14 +800,23 @@ export function HighQualityRAG() {
       {error && (
         <Alert
           color="red"
-          onClose={() => setError(null)}
-          className="flex items-center"
+          className="flex items-center justify-between"
         >
-          <ExclamationCircleIcon className="h-5 w-5 mr-2" />
-          <div className="flex-1">
-            <Typography className="font-medium">Erro</Typography>
-            <Typography variant="small">{error}</Typography>
+          <div className="flex items-center">
+            <ExclamationCircleIcon className="h-5 w-5 mr-2" />
+            <div className="flex-1">
+              <Typography className="font-medium">Erro</Typography>
+              <Typography variant="small">{error}</Typography>
+            </div>
           </div>
+          <IconButton
+            size="sm"
+            variant="text"
+            color="white"
+            onClick={() => setError(null)}
+          >
+            <XMarkIcon className="h-4 w-4" />
+          </IconButton>
         </Alert>
       )}
 
