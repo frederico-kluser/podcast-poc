@@ -108,6 +108,8 @@ export class HighQualityRAGService {
           // Enhanced text reconstruction with proper spacing
           const pageText = this.reconstructPageText(textContent);
           
+          // Log do texto extraído da página
+          console.log(`📄 Texto extraído da página ${pageNum}:`, pageText);
           
           if (pageText) {
             const chunks = await this.splitter.splitText(pageText);
@@ -151,6 +153,14 @@ export class HighQualityRAGService {
         // Yield to main thread
         await new Promise(resolve => setTimeout(resolve, 0));
       }
+      
+      // Log do texto completo extraído
+      const fullText = allChunks.map(chunk => chunk.text).join('\n\n');
+      console.log('📄 TEXTO COMPLETO DO PDF EXTRAÍDO:');
+      console.log('=====================================');
+      console.log(fullText);
+      console.log('=====================================');
+      console.log(`Total de chunks: ${allChunks.length}`);
       
       // Process embeddings
       await this.generateAndStoreEmbeddings(allChunks, file.name, onProgress);
