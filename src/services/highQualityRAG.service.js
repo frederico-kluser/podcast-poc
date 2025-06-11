@@ -76,83 +76,85 @@ export class HighQualityRAGService {
       await this.initialize();
     }
 
-    return new Promise(async (resolve, reject) => {
+    return new Promise((resolve, reject) => {
       const startTime = Date.now();
-      const arrayBuffer = await file.arrayBuffer();
       const allChunks = [];
       let processedPages = 0;
 
-      // Listener para mensagens do worker
-      const handleWorkerMessage = async (event) => {
-        const { type, data, error } = event.data;
+      // Get array buffer and start processing
+      file.arrayBuffer().then(arrayBuffer => {
+        // Listener para mensagens do worker
+        const handleWorkerMessage = async (event) => {
+          const { type, data, error } = event.data;
 
-        if (type === 'batch-complete') {
-          processedPages += data.chunks.length;
-          
-          // Processar chunks do batch
-          for (const pageData of data.chunks) {
-            const chunks = await this.splitter.splitText(pageData.text);
+          if (type === 'batch-complete') {
+            processedPages += data.chunks.length;
             
-            chunks.forEach((chunk, index) => {
-              const hash = this.generateHash(chunk);
+            // Processar chunks do batch
+            for (const pageData of data.chunks) {
+              const chunks = await this.splitter.splitText(pageData.text);
               
-              allChunks.push({
-                text: chunk,
-                metadata: {
-                  pageNumber: pageData.pageNumber,
-                  chunkIndex: index,
-                  source: file.name,
-                  totalTokens: this.estimateTokens(chunk),
-                  importance: this.calculateImportance(chunk, pageData.pageNumber, 100), // Assumindo 100 páginas max
-                  hash: hash
-                }
+              chunks.forEach((chunk, index) => {
+                const hash = this.generateHash(chunk);
+                
+                allChunks.push({
+                  text: chunk,
+                  metadata: {
+                    pageNumber: pageData.pageNumber,
+                    chunkIndex: index,
+                    source: file.name,
+                    totalTokens: this.estimateTokens(chunk),
+                    importance: this.calculateImportance(chunk, pageData.pageNumber, 100), // Assumindo 100 páginas max
+                    hash: hash
+                  }
+                });
               });
+            }
+
+            onProgress?.({
+              phase: 'extraction',
+              current: data.progress.current,
+              total: data.progress.total,
+              percentage: data.progress.percentage * 0.4, // 40% para extração
+              message: `Extraindo texto: ${data.progress.current}/${data.progress.total} páginas`
             });
-          }
-
-          onProgress?.({
-            phase: 'extraction',
-            current: data.progress.current,
-            total: data.progress.total,
-            percentage: data.progress.percentage * 0.4, // 40% para extração
-            message: `Extraindo texto: ${data.progress.current}/${data.progress.total} páginas`
-          });
-        } 
-        else if (type === 'processing-complete') {
-          // Iniciar fase de embeddings
-          this.pdfWorker.removeEventListener('message', handleWorkerMessage);
-          
-          try {
-            await this.generateAndStoreEmbeddings(allChunks, file.name, onProgress);
+          } 
+          else if (type === 'processing-complete') {
+            // Iniciar fase de embeddings
+            this.pdfWorker.removeEventListener('message', handleWorkerMessage);
             
-            const processingTime = Date.now() - startTime;
-            const result = {
-              success: true,
-              documentName: file.name,
-              totalPages: processedPages,
-              totalChunks: allChunks.length,
-              processingTime: processingTime,
-              estimatedCost: this.estimateCost(allChunks.length)
-            };
-            
-            resolve(result);
-          } catch (err) {
-            reject(err);
+            try {
+              await this.generateAndStoreEmbeddings(allChunks, file.name, onProgress);
+              
+              const processingTime = Date.now() - startTime;
+              const result = {
+                success: true,
+                documentName: file.name,
+                totalPages: processedPages,
+                totalChunks: allChunks.length,
+                processingTime: processingTime,
+                estimatedCost: this.estimateCost(allChunks.length)
+              };
+              
+              resolve(result);
+            } catch (err) {
+              reject(err);
+            }
           }
-        }
-        else if (type === 'error') {
-          this.pdfWorker.removeEventListener('message', handleWorkerMessage);
-          reject(new Error(error));
-        }
-      };
+          else if (type === 'error') {
+            this.pdfWorker.removeEventListener('message', handleWorkerMessage);
+            reject(new Error(error));
+          }
+        };
 
-      this.pdfWorker.addEventListener('message', handleWorkerMessage);
-      
-      // Iniciar processamento
-      this.pdfWorker.postMessage({
-        type: 'process-pdf',
-        data: { arrayBuffer, chunkSize: this.config.chunkSize }
-      });
+        this.pdfWorker.addEventListener('message', handleWorkerMessage);
+        
+        // Iniciar processamento
+        this.pdfWorker.postMessage({
+          type: 'process-pdf',
+          data: { arrayBuffer, chunkSize: this.config.chunkSize }
+        });
+      }).catch(reject);
     });
   }
 
