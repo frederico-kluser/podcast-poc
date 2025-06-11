@@ -6,6 +6,12 @@ export default defineConfig({
   optimizeDeps: {
     include: ['openai', '@orama/orama', 'pdfjs-dist']
   },
+  resolve: {
+    alias: {
+      stream: 'stream-browserify',
+      buffer: 'buffer'
+    }
+  },
   build: {
     rollupOptions: {
       external: ['fs', 'path', 'os'],
@@ -29,5 +35,6 @@ export default defineConfig({
   },
   define: {
     global: 'globalThis',
+    'process.env': {}
   }
 })
