@@ -8,7 +8,6 @@ export class HighQualityRAGService {
     this.openai = null;
     this.db = null;
     this.initialized = false;
-    this.pdfWorker = null;
     
     // Configurações otimizadas para qualidade máxima
     this.config = {
@@ -71,21 +70,6 @@ export class HighQualityRAGService {
         }
       });
 
-      // Inicializar Web Worker with error handling
-      try {
-        this.pdfWorker = new Worker(new URL('../workers/pdf.worker.js', import.meta.url), {
-          type: 'module'
-        });
-        
-        // Add error handler for worker
-        this.pdfWorker.onerror = (error) => {
-          console.error('PDF Worker error:', error);
-        };
-      } catch (workerError) {
-        console.warn('Web Worker initialization failed, falling back to main thread processing');
-        this.pdfWorker = null;
-      }
-
       this.initialized = true;
     } catch (error) {
       this.initialized = false;
@@ -93,114 +77,12 @@ export class HighQualityRAGService {
     }
   }
 
-  // Processar PDF com Web Worker ou fallback
+  // Processar PDF
   async processPDF(file, onProgress) {
     if (!this.initialized) {
       await this.initialize();
     }
 
-    // Use Web Worker if available, otherwise fallback to main thread
-    if (this.pdfWorker) {
-      return this.processPDFWithWorker(file, onProgress);
-    } else {
-      return this.processPDFMainThread(file, onProgress);
-    }
-  }
-
-  // Processar PDF com Web Worker
-  async processPDFWithWorker(file, onProgress) {
-    return new Promise((resolve, reject) => {
-      const startTime = Date.now();
-      const allChunks = [];
-      let processedPages = 0;
-
-      // Get array buffer and start processing
-      file.arrayBuffer().then(arrayBuffer => {
-        // Listener para mensagens do worker
-        const handleWorkerMessage = async (event) => {
-          const { type, data, error } = event.data;
-
-          if (type === 'batch-complete') {
-            processedPages += data.chunks.length;
-            
-            // Processar chunks do batch
-            for (const pageData of data.chunks) {
-              const chunks = await this.splitter.splitText(pageData.text);
-              
-              chunks.forEach((chunkData, index) => {
-                // Verificar se chunk é um objeto com propriedade 'text' ou uma string direta
-                const chunkText = typeof chunkData === 'string' ? chunkData : chunkData.text;
-                
-                if (!chunkText || typeof chunkText !== 'string') {
-                  console.warn('Invalid chunk detected:', chunkData);
-                  return;
-                }
-                
-                const hash = this.generateHash(chunkText);
-                
-                allChunks.push({
-                  text: chunkText,
-                  metadata: {
-                    pageNumber: pageData.pageNumber,
-                    chunkIndex: index,
-                    source: file.name,
-                    totalTokens: this.estimateTokens(chunkText),
-                    importance: this.calculateImportance(chunkText, pageData.pageNumber, 100),
-                    hash: hash
-                  }
-                });
-              });
-            }
-
-            onProgress?.({
-              phase: 'extraction',
-              current: data.progress.current,
-              total: data.progress.total,
-              percentage: data.progress.percentage * 0.4, // 40% para extração
-              message: `Extraindo texto: ${data.progress.current}/${data.progress.total} páginas`
-            });
-          } 
-          else if (type === 'processing-complete') {
-            // Iniciar fase de embeddings
-            this.pdfWorker.removeEventListener('message', handleWorkerMessage);
-            
-            try {
-              await this.generateAndStoreEmbeddings(allChunks, file.name, onProgress);
-              
-              const processingTime = Date.now() - startTime;
-              const result = {
-                success: true,
-                documentName: file.name,
-                totalPages: processedPages,
-                totalChunks: allChunks.length,
-                processingTime: processingTime,
-                estimatedCost: this.estimateCost(allChunks.length)
-              };
-              
-              resolve(result);
-            } catch (err) {
-              reject(err);
-            }
-          }
-          else if (type === 'error') {
-            this.pdfWorker.removeEventListener('message', handleWorkerMessage);
-            reject(new Error(error));
-          }
-        };
-
-        this.pdfWorker.addEventListener('message', handleWorkerMessage);
-        
-        // Iniciar processamento
-        this.pdfWorker.postMessage({
-          type: 'process-pdf',
-          data: { arrayBuffer, chunkSize: this.config.chunkSize }
-        });
-      }).catch(reject);
-    });
-  }
-
-  // Fallback para processar PDF na thread principal
-  async processPDFMainThread(file, onProgress) {
     try {
       const startTime = Date.now();
       const arrayBuffer = await file.arrayBuffer();
@@ -835,10 +717,6 @@ Example: 3,1,5,2,4`;
 
   // Limpar recursos
   cleanup() {
-    if (this.pdfWorker) {
-      this.pdfWorker.terminate();
-      this.pdfWorker = null;
-    }
     this.embeddingCache.clear();
     this.responseCache.clear();
   }
