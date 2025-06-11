@@ -37,45 +37,78 @@ export class HighQualityRAGService {
   }
 
   async initialize() {
-    const apiKey = ConfigService.getApiKey();
-    if (!apiKey) {
-      throw new Error('API key não configurada');
-    }
-
-    this.openai = new OpenAI({
-      apiKey: apiKey,
-      dangerouslyAllowBrowser: true
-    });
-
-    // Criar banco vetorial otimizado
-    this.db = await create({
-      schema: {
-        id: 'string',
-        text: 'string',
-        embedding: `vector[${this.config.embeddingDimensions}]`,
-        pageNumber: 'number',
-        source: 'string', 
-        chunkIndex: 'number',
-        totalTokens: 'number',
-        importance: 'number',
-        hash: 'string'
+    try {
+      const apiKey = ConfigService.getApiKey();
+      if (!apiKey) {
+        throw new Error('API key não configurada');
       }
-    });
 
-    // Inicializar Web Worker
-    this.pdfWorker = new Worker(new URL('../workers/pdf.worker.js', import.meta.url), {
-      type: 'module'
-    });
+      // Test API key before proceeding
+      this.openai = new OpenAI({
+        apiKey: apiKey,
+        dangerouslyAllowBrowser: true
+      });
 
-    this.initialized = true;
+      // Test OpenAI connection
+      try {
+        await this.openai.models.list();
+      } catch (apiError) {
+        throw new Error(`Erro na API OpenAI: ${apiError.message}`);
+      }
+
+      // Criar banco vetorial otimizado
+      this.db = await create({
+        schema: {
+          id: 'string',
+          text: 'string',
+          embedding: `vector[${this.config.embeddingDimensions}]`,
+          pageNumber: 'number',
+          source: 'string', 
+          chunkIndex: 'number',
+          totalTokens: 'number',
+          importance: 'number',
+          hash: 'string'
+        }
+      });
+
+      // Inicializar Web Worker with error handling
+      try {
+        this.pdfWorker = new Worker(new URL('../workers/pdf.worker.js', import.meta.url), {
+          type: 'module'
+        });
+        
+        // Add error handler for worker
+        this.pdfWorker.onerror = (error) => {
+          console.error('PDF Worker error:', error);
+        };
+      } catch (workerError) {
+        console.warn('Web Worker initialization failed, falling back to main thread processing');
+        this.pdfWorker = null;
+      }
+
+      this.initialized = true;
+    } catch (error) {
+      this.initialized = false;
+      throw new Error(`Falha na inicialização: ${error.message}`);
+    }
   }
 
-  // Processar PDF com Web Worker
+  // Processar PDF com Web Worker ou fallback
   async processPDF(file, onProgress) {
     if (!this.initialized) {
       await this.initialize();
     }
 
+    // Use Web Worker if available, otherwise fallback to main thread
+    if (this.pdfWorker) {
+      return this.processPDFWithWorker(file, onProgress);
+    } else {
+      return this.processPDFMainThread(file, onProgress);
+    }
+  }
+
+  // Processar PDF com Web Worker
+  async processPDFWithWorker(file, onProgress) {
     return new Promise((resolve, reject) => {
       const startTime = Date.now();
       const allChunks = [];
@@ -158,6 +191,88 @@ export class HighQualityRAGService {
     });
   }
 
+  // Fallback para processar PDF na thread principal
+  async processPDFMainThread(file, onProgress) {
+    try {
+      const startTime = Date.now();
+      const arrayBuffer = await file.arrayBuffer();
+      
+      // Dynamic import para evitar erro se pdfjs não estiver disponível
+      const pdfjsLib = await import('pdfjs-dist');
+      pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+      
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const totalPages = pdf.numPages;
+      const allChunks = [];
+      
+      // Process pages in batches
+      const PAGES_PER_BATCH = 3; // Menor para evitar travar a UI
+      
+      for (let startPage = 1; startPage <= totalPages; startPage += PAGES_PER_BATCH) {
+        const endPage = Math.min(startPage + PAGES_PER_BATCH - 1, totalPages);
+        
+        for (let pageNum = startPage; pageNum <= endPage; pageNum++) {
+          const page = await pdf.getPage(pageNum);
+          const textContent = await page.getTextContent();
+          
+          // Simple text reconstruction
+          const pageText = textContent.items
+            .map(item => item.str || '')
+            .join(' ')
+            .trim();
+          
+          if (pageText) {
+            const chunks = await this.splitter.splitText(pageText);
+            
+            chunks.forEach((chunk, index) => {
+              const hash = this.generateHash(chunk);
+              
+              allChunks.push({
+                text: chunk,
+                metadata: {
+                  pageNumber: pageNum,
+                  chunkIndex: index,
+                  source: file.name,
+                  totalTokens: this.estimateTokens(chunk),
+                  importance: this.calculateImportance(chunk, pageNum, totalPages),
+                  hash: hash
+                }
+              });
+            });
+          }
+          
+          page.cleanup();
+        }
+        
+        onProgress?.({
+          phase: 'extraction',
+          current: endPage,
+          total: totalPages,
+          percentage: (endPage / totalPages) * 40,
+          message: `Extraindo texto: ${endPage}/${totalPages} páginas`
+        });
+        
+        // Yield to main thread
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+      
+      // Process embeddings
+      await this.generateAndStoreEmbeddings(allChunks, file.name, onProgress);
+      
+      const processingTime = Date.now() - startTime;
+      return {
+        success: true,
+        documentName: file.name,
+        totalPages: totalPages,
+        totalChunks: allChunks.length,
+        processingTime: processingTime,
+        estimatedCost: this.estimateCost(allChunks.length)
+      };
+    } catch (error) {
+      throw new Error(`Erro no processamento do PDF: ${error.message}`);
+    }
+  }
+
   // Gerar e armazenar embeddings com retry e cache
   async generateAndStoreEmbeddings(chunks, sourceName, onProgress) {
     const totalChunks = chunks.length;
@@ -237,64 +352,99 @@ export class HighQualityRAGService {
 
   // Busca semântica otimizada
   async searchSemantic(query, options = {}) {
-    if (!this.initialized || !this.db) {
-      throw new Error('Sistema não inicializado');
-    }
-
-    const {
-      limit = this.config.topK,
-      threshold = this.config.similarityThreshold,
-      useReranking = true,
-      includeContext = true
-    } = options;
-
-    // Gerar embedding da query com cache
-    const queryHash = this.generateHash(query);
-    let queryEmbedding;
-    
-    if (this.embeddingCache.has(queryHash)) {
-      queryEmbedding = this.embeddingCache.get(queryHash);
-    } else {
-      queryEmbedding = await this.generateEmbeddingWithRetry(query);
-      this.embeddingCache.set(queryHash, queryEmbedding);
-    }
-
-    // Busca vetorial
-    const results = await search(this.db, {
-      mode: 'vector',
-      vector: {
-        value: queryEmbedding,
-        property: 'embedding'
-      },
-      limit: limit * 2,
-      threshold: threshold,
-      includeVectors: false
-    });
-
-    let relevantDocs = results.hits.map(hit => ({
-      text: hit.document.text,
-      score: hit.score,
-      metadata: {
-        pageNumber: hit.document.pageNumber,
-        source: hit.document.source,
-        chunkIndex: hit.document.chunkIndex,
-        totalTokens: hit.document.totalTokens,
-        importance: hit.document.importance,
-        hash: hit.document.hash
+    try {
+      if (!this.initialized || !this.db) {
+        throw new Error('Sistema não inicializado');
       }
-    }));
 
-    // Reranking com GPT
-    if (useReranking && relevantDocs.length > 0) {
-      relevantDocs = await this.rerankDocuments(query, relevantDocs, limit);
+      if (!query || query.trim().length === 0) {
+        return [];
+      }
+
+      const {
+        limit = this.config.topK,
+        threshold = this.config.similarityThreshold,
+        useReranking = true,
+        includeContext = true
+      } = options;
+
+      // Gerar embedding da query com cache
+      const queryHash = this.generateHash(query);
+      let queryEmbedding;
+      
+      try {
+        if (this.embeddingCache.has(queryHash)) {
+          queryEmbedding = this.embeddingCache.get(queryHash);
+        } else {
+          queryEmbedding = await this.generateEmbeddingWithRetry(query);
+          this.embeddingCache.set(queryHash, queryEmbedding);
+        }
+      } catch (embedError) {
+        throw new Error(`Erro ao gerar embedding: ${embedError.message}`);
+      }
+
+      // Busca vetorial
+      let results;
+      try {
+        results = await search(this.db, {
+          mode: 'vector',
+          vector: {
+            value: queryEmbedding,
+            property: 'embedding'
+          },
+          limit: limit * 2,
+          threshold: threshold,
+          includeVectors: false
+        });
+      } catch (searchError) {
+        console.warn('Vector search failed, falling back to text search:', searchError);
+        // Fallback to simple text search
+        results = await search(this.db, {
+          term: query,
+          limit: limit
+        });
+      }
+
+      if (!results || !results.hits || results.hits.length === 0) {
+        return [];
+      }
+
+      let relevantDocs = results.hits.map(hit => ({
+        text: hit.document.text,
+        score: hit.score || 0.5,
+        metadata: {
+          pageNumber: hit.document.pageNumber,
+          source: hit.document.source,
+          chunkIndex: hit.document.chunkIndex,
+          totalTokens: hit.document.totalTokens,
+          importance: hit.document.importance,
+          hash: hit.document.hash
+        }
+      }));
+
+      // Reranking com GPT (with error handling)
+      if (useReranking && relevantDocs.length > 0) {
+        try {
+          relevantDocs = await this.rerankDocuments(query, relevantDocs, limit);
+        } catch (rerankError) {
+          console.warn('Reranking failed, using original order:', rerankError);
+        }
+      }
+
+      // Incluir contexto adjacente se solicitado
+      if (includeContext) {
+        try {
+          relevantDocs = await this.expandWithContext(relevantDocs);
+        } catch (contextError) {
+          console.warn('Context expansion failed:', contextError);
+        }
+      }
+
+      return relevantDocs.slice(0, limit);
+    } catch (error) {
+      console.error('Search failed:', error);
+      throw new Error(`Erro na busca: ${error.message}`);
     }
-
-    // Incluir contexto adjacente se solicitado
-    if (includeContext) {
-      relevantDocs = await this.expandWithContext(relevantDocs);
-    }
-
-    return relevantDocs.slice(0, limit);
   }
 
   // Expandir com chunks adjacentes para mais contexto
