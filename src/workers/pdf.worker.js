@@ -1,7 +1,7 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Configurar worker do PDF.js
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Configurar worker do PDF.js - use absolute URLs for better compatibility
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
 self.onmessage = async function(event) {
   const { type, data } = event.data;
@@ -67,7 +67,16 @@ self.onmessage = async function(event) {
 function reconstructPageText(textContent) {
   const lines = {};
   
-  textContent.items.forEach(item => {
+  // Handle both array and object formats
+  const items = textContent.items || textContent;
+  if (!items || !Array.isArray(items)) {
+    return '';
+  }
+  
+  items.forEach(item => {
+    // Ensure item has required properties
+    if (!item.transform || !item.str) return;
+    
     const y = Math.round(item.transform[5]);
     if (!lines[y]) lines[y] = [];
     lines[y].push(item);
@@ -78,7 +87,7 @@ function reconstructPageText(textContent) {
     .map(y => {
       return lines[y]
         .sort((a, b) => a.transform[4] - b.transform[4])
-        .map(item => item.str)
+        .map(item => item.str || '')
         .join(' ')
         .trim();
     })
