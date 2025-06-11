@@ -127,17 +127,25 @@ export class HighQualityRAGService {
             for (const pageData of data.chunks) {
               const chunks = await this.splitter.splitText(pageData.text);
               
-              chunks.forEach((chunk, index) => {
-                const hash = this.generateHash(chunk);
+              chunks.forEach((chunkData, index) => {
+                // Verificar se chunk é um objeto com propriedade 'text' ou uma string direta
+                const chunkText = typeof chunkData === 'string' ? chunkData : chunkData.text;
+                
+                if (!chunkText || typeof chunkText !== 'string') {
+                  console.warn('Invalid chunk detected:', chunkData);
+                  return;
+                }
+                
+                const hash = this.generateHash(chunkText);
                 
                 allChunks.push({
-                  text: chunk,
+                  text: chunkText,
                   metadata: {
                     pageNumber: pageData.pageNumber,
                     chunkIndex: index,
                     source: file.name,
-                    totalTokens: this.estimateTokens(chunk),
-                    importance: this.calculateImportance(chunk, pageData.pageNumber, 100), // Assumindo 100 páginas max
+                    totalTokens: this.estimateTokens(chunkText),
+                    importance: this.calculateImportance(chunkText, pageData.pageNumber, 100),
                     hash: hash
                   }
                 });
@@ -735,11 +743,17 @@ Example: 3,1,5,2,4`;
 
   // Utilitários
   estimateTokens(text) {
+    if (!text || typeof text !== 'string') {
+      return 0;
+    }
     // Aproximação: ~3 caracteres por token em português
     return Math.ceil(text.length / 3);
   }
 
   generateHash(text) {
+    if (!text || typeof text !== 'string') {
+      return 'invalid-hash';
+    }
     // Hash simples para cache
     let hash = 0;
     for (let i = 0; i < text.length; i++) {
@@ -751,26 +765,42 @@ Example: 3,1,5,2,4`;
   }
 
   calculateImportance(text, pageNum, totalPages) {
+    // Validação de entrada
+    if (!text || typeof text !== 'string') {
+      console.warn('calculateImportance received invalid text:', typeof text, text);
+      return 1.0; // Retorna importância padrão
+    }
+    
+    const textStr = String(text).trim();
+    if (!textStr) {
+      return 0.5;
+    }
+    
     let score = 1.0;
     
-    // Primeiras páginas (resumo, introdução)
-    if (pageNum <= 3) score *= 1.3;
-    
-    // Últimas páginas (conclusão)
-    if (pageNum >= totalPages - 2) score *= 1.2;
-    
-    // Títulos e subtítulos (heurística)
-    if (text.match(/^[A-Z\s\d\.]{3,50}$/m)) score *= 1.4;
-    
-    // Parágrafos com números e dados
-    const numbers = text.match(/\d+\.?\d*/g) || [];
-    if (numbers.length > 5) score *= 1.2;
-    
-    // Listas e enumerações
-    if (text.match(/^\s*[\d\-\*•]\s+/m)) score *= 1.1;
-    
-    // Chunks mais longos (mais contexto)
-    if (text.length > 600) score *= 1.1;
+    try {
+      // Primeiras páginas (resumo, introdução)
+      if (pageNum <= 3) score *= 1.3;
+      
+      // Últimas páginas (conclusão)
+      if (pageNum >= totalPages - 2) score *= 1.2;
+      
+      // Títulos e subtítulos (heurística)
+      if (textStr.match(/^[A-Z\s\d.]{3,50}$/m)) score *= 1.4;
+      
+      // Parágrafos com números e dados
+      const numbers = textStr.match(/\d+\.?\d*/g) || [];
+      if (numbers.length > 5) score *= 1.2;
+      
+      // Listas e enumerações
+      if (textStr.match(/^\s*[\d\-*•]\s+/m)) score *= 1.1;
+      
+      // Chunks mais longos (mais contexto)
+      if (textStr.length > 600) score *= 1.1;
+    } catch (error) {
+      console.error('Error in calculateImportance:', error);
+      return 1.0;
+    }
     
     return Math.min(score, 2.0);
   }
