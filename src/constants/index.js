@@ -26,7 +26,6 @@ export const API_ENDPOINTS = {
 export const PDF_CONFIG = {
   MAX_FILE_SIZE: 10 * 1024 * 1024, // 10MB
   ACCEPTED_TYPES: ['application/pdf'],
-  WORKER_SRC: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js',
   MAX_TEXT_PREVIEW: 1000,
   MAX_CONTEXT_LENGTH: 3000,
 };

@@ -5,8 +5,8 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import { PDF_CONFIG, ERROR_MESSAGES } from '../constants';
 
-// Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_CONFIG.WORKER_SRC;
+// Configure PDF.js to use CDN worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.3.31/build/pdf.worker.min.mjs';
 
 /**
  * PDF processing service class
