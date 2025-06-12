@@ -2,12 +2,15 @@ import OpenAI from 'openai';
 import { create, insert, search, save, load } from '@orama/orama';
 import { SimpleTextSplitter } from '../utils/textSplitter.js';
 import { ConfigService } from './config.service';
+import { TextCorrectionService } from './textCorrection.service';
 
 export class HighQualityRAGService {
   constructor() {
     this.openai = null;
     this.db = null;
     this.initialized = false;
+    this.textCorrectionService = TextCorrectionService;
+    this.enableTextCorrection = true;
     
     // Configurações otimizadas para qualidade máxima
     this.config = {
@@ -106,10 +109,30 @@ export class HighQualityRAGService {
           const textContent = await page.getTextContent();
           
           // Enhanced text reconstruction with proper spacing
-          const pageText = this.reconstructPageText(textContent);
+          let pageText = this.reconstructPageText(textContent);
           
           // Log do texto extraído da página
           console.log(`📄 Texto extraído da página ${pageNum}:`, pageText);
+          
+          // Apply text correction if enabled
+          if (pageText && this.enableTextCorrection) {
+            try {
+              onProgress?.({ 
+                phase: 'correction',
+                current: pageNum,
+                total: totalPages,
+                percentage: (pageNum / totalPages) * 30,
+                message: `Corrigindo espaçamento: página ${pageNum}/${totalPages}`
+              });
+              
+              const correctedText = await this.textCorrectionService.correctSpacing(pageText);
+              console.log(`✅ Texto corrigido da página ${pageNum}:`, correctedText);
+              pageText = correctedText;
+            } catch (correctionError) {
+              console.warn(`⚠️ Erro na correção da página ${pageNum}, usando texto original:`, correctionError.message);
+              // Continue with original text if correction fails
+            }
+          }
           
           if (pageText) {
             const chunks = await this.splitter.splitText(pageText);
@@ -161,6 +184,134 @@ export class HighQualityRAGService {
       console.log(fullText);
       console.log('=====================================');
       console.log(`Total de chunks: ${allChunks.length}`);
+      
+      // Process embeddings
+      await this.generateAndStoreEmbeddings(allChunks, file.name, onProgress);
+      
+      const processingTime = Date.now() - startTime;
+      return {
+        success: true,
+        documentName: file.name,
+        totalPages: totalPages,
+        totalChunks: allChunks.length,
+        processingTime: processingTime,
+        estimatedCost: this.estimateCost(allChunks.length)
+      };
+    } catch (error) {
+      throw new Error(`Erro no processamento do PDF: ${error.message}`);
+    }
+  }
+
+  // Process PDF with batch text correction
+  async processWithBatchCorrection(file, onProgress) {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+
+    try {
+      const startTime = Date.now();
+      const arrayBuffer = await file.arrayBuffer();
+      
+      // Dynamic import para evitar erro se pdfjs não estiver disponível
+      const pdfjsLib = await import('pdfjs-dist');
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.3.31/build/pdf.worker.min.mjs';
+      
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const totalPages = pdf.numPages;
+      const extractedTexts = [];
+      
+      // Extract all pages first
+      onProgress?.({ 
+        phase: 'extraction',
+        current: 0,
+        total: totalPages,
+        percentage: 0,
+        message: 'Extraindo texto do PDF...'
+      });
+      
+      for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+        const page = await pdf.getPage(pageNum);
+        const textContent = await page.getTextContent();
+        const pageText = this.reconstructPageText(textContent);
+        
+        extractedTexts.push({
+          pageNumber: pageNum,
+          text: pageText
+        });
+        
+        page.cleanup();
+        
+        onProgress?.({ 
+          phase: 'extraction',
+          current: pageNum,
+          total: totalPages,
+          percentage: (pageNum / totalPages) * 30,
+          message: `Extraindo texto: ${pageNum}/${totalPages} páginas`
+        });
+      }
+      
+      // Correct all texts in batch if enabled
+      let correctedTexts = extractedTexts;
+      if (this.enableTextCorrection) {
+        onProgress?.({ 
+          phase: 'correction',
+          current: 0,
+          total: totalPages,
+          percentage: 30,
+          message: 'Corrigindo espaçamento do texto...'
+        });
+        
+        correctedTexts = await this.textCorrectionService.correctInBatches(
+          extractedTexts, 
+          (progress) => {
+            onProgress?.({ 
+              phase: 'correction',
+              current: progress.current,
+              total: progress.total,
+              percentage: 30 + (progress.percentage * 0.2), // 30-50%
+              message: `Corrigindo espaçamento: ${progress.current}/${progress.total} páginas`
+            });
+          }
+        );
+        
+        // Log corrected texts
+        correctedTexts.forEach(page => {
+          if (!page.error) {
+            console.log(`✅ Texto corrigido da página ${page.pageNumber}:`, page.text);
+          }
+        });
+      }
+      
+      // Process corrected texts into chunks
+      const allChunks = [];
+      for (const pageData of correctedTexts) {
+        if (pageData.text) {
+          const chunks = await this.splitter.splitText(pageData.text);
+          
+          chunks.forEach((chunkData, index) => {
+            const chunkText = typeof chunkData === 'string' ? chunkData : chunkData.text;
+            
+            if (!chunkText || typeof chunkText !== 'string') {
+              console.warn('Invalid chunk detected:', chunkData);
+              return;
+            }
+            
+            const hash = this.generateHash(chunkText);
+            
+            allChunks.push({
+              text: chunkText,
+              metadata: {
+                pageNumber: pageData.pageNumber,
+                chunkIndex: index,
+                source: file.name,
+                totalTokens: this.estimateTokens(chunkText),
+                importance: this.calculateImportance(chunkText, pageData.pageNumber, totalPages),
+                hash: hash
+              }
+            });
+          });
+        }
+      }
       
       // Process embeddings
       await this.generateAndStoreEmbeddings(allChunks, file.name, onProgress);
