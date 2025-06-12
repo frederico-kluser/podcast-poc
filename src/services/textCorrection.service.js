@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { ConfigService } from './config.service';
 import { createCorrectionMetrics } from '../utils/correctionMetrics';
+import { OpenAIParallelService } from './openaiParallel.service';
 
 export class TextCorrectionService {
   static openai = null;
@@ -11,6 +12,11 @@ export class TextCorrectionService {
   static correctionCache = new Map();
   static maxCacheSize = 1000;
   static metrics = createCorrectionMetrics();
+  static parallelConfig = {
+    concurrency: 8,
+    maxRequestsPerMinute: 3500,
+    enableAdaptiveConcurrency: true
+  };
 
   static async initialize() {
     const apiKey = ConfigService.getApiKey();
@@ -120,6 +126,70 @@ ${text}
   }
 
   static async correctInBatches(chunks, onProgress) {
+    // Use the new parallel processing service for optimal performance
+    console.log(`🚀 Iniciando correção paralela de ${chunks.length} chunks`);
+    
+    const startTime = Date.now();
+    const texts = chunks.map(chunk => chunk.text);
+    
+    // Process all texts in parallel with optimal concurrency
+    const results = await OpenAIParallelService.correctTextsInParallel(texts, {
+      concurrency: this.parallelConfig.concurrency,
+      maxRequestsPerMinute: this.parallelConfig.maxRequestsPerMinute,
+      enableAdaptiveConcurrency: this.parallelConfig.enableAdaptiveConcurrency,
+      model: this.model,
+      temperature: this.temperature,
+      onProgress: (progress) => {
+        if (onProgress) {
+          onProgress({
+            current: progress.completed + progress.failed,
+            total: progress.total,
+            percentage: parseFloat(progress.percentage),
+            inFlight: progress.inFlight,
+            elapsedTime: progress.elapsedTime
+          });
+        }
+      },
+      onRequestComplete: ({ index, completed, total }) => {
+        console.log(`✅ Chunk ${index + 1}/${total} corrigido`);
+      },
+      onRequestError: ({ index, error, failed, total }) => {
+        console.error(`❌ Erro no chunk ${index + 1}: ${error}`);
+      }
+    });
+
+    // Map results back to chunks format
+    const correctedChunks = chunks.map((chunk, index) => {
+      const result = results[index];
+      
+      if (result.success) {
+        // Add to cache
+        const textHash = this.generateHash(chunk.text);
+        this.addToCache(textHash, result.text);
+        
+        // Track metrics
+        const processingTime = (Date.now() - startTime) / chunks.length;
+        this.metrics.track(chunk.text, result.text, processingTime);
+        
+        return { ...chunk, text: result.text };
+      } else {
+        // Track error in metrics
+        const processingTime = (Date.now() - startTime) / chunks.length;
+        this.metrics.track(chunk.text, chunk.text, processingTime, result.error);
+        
+        return { ...chunk, text: chunk.text, error: result.error };
+      }
+    });
+
+    const totalTime = Date.now() - startTime;
+    console.log(`\n🎉 Correção paralela concluída em ${(totalTime / 1000).toFixed(2)}s`);
+    console.log(`⚡ Velocidade média: ${(chunks.length / (totalTime / 1000)).toFixed(2)} chunks/s`);
+
+    return correctedChunks;
+  }
+
+  // Legacy method for backward compatibility - now uses parallel processing internally
+  static async correctInBatchesSequential(chunks, onProgress) {
     const results = [];
     const batchSize = 5;
 
@@ -208,6 +278,34 @@ ${text}
 
   static resetMetrics() {
     this.metrics.reset();
+  }
+
+  static configureParallelProcessing(config) {
+    this.parallelConfig = {
+      ...this.parallelConfig,
+      ...config
+    };
+    console.log('📋 Configuração de processamento paralelo atualizada:', this.parallelConfig);
+  }
+
+  static getParallelConfig() {
+    return { ...this.parallelConfig };
+  }
+
+  static async estimateParallelProcessingTime(chunks) {
+    const avgProcessingTime = 2000; // 2 seconds average per request
+    const concurrency = this.parallelConfig.concurrency;
+    const batches = Math.ceil(chunks.length / concurrency);
+    const estimatedTime = batches * avgProcessingTime;
+    
+    return {
+      totalChunks: chunks.length,
+      concurrency,
+      estimatedBatches: batches,
+      estimatedTimeMs: estimatedTime,
+      estimatedTimeSeconds: estimatedTime / 1000,
+      estimatedTimeMinutes: estimatedTime / 60000
+    };
   }
 }
 
