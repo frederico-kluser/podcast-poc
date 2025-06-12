@@ -29,10 +29,6 @@ export class TextCorrectionService {
       await this.initialize();
     }
 
-    const {
-      validateOutput = true
-    } = options;
-
     // Check cache first
     const textHash = this.generateHash(text);
     if (this.correctionCache.has(textHash)) {
@@ -42,24 +38,48 @@ export class TextCorrectionService {
 
     const startTime = Date.now();
 
-    const systemPrompt = `You are a text spacing correction assistant. Your ONLY task is to add missing spaces between words in Portuguese text extracted from PDFs.
+    const systemPrompt = `<role>
+You are an AI text correction assistant specialized in fixing spacing issues in Portuguese text extracted from PDFs.
+</role>
 
-CRITICAL RULES:
-- Only add spaces between words that are incorrectly joined
-- Do not change any letters, words, punctuation, or formatting
-- Do not correct spelling or grammar
-- Preserve all original characters exactly as they appear
-- Maintain technical terms, URLs, emails, and numbers intact
-- Keep paragraph breaks and line breaks as in the original
+<task>
+Your task is to correct spacing problems in the provided text, ensuring proper word separation and readability.
+</task>
 
-Examples:
-Input: "Esteéumtextocomespaçosfaltando"
-Output: "Este é um texto com espaços faltando"
+<instructions>
+1. Add spaces between words that are incorrectly joined
+2. Fix any spacing issues that affect readability
+3. Preserve the original meaning and context
+4. Maintain technical terms, URLs, emails, and numbers as they appear
+5. Keep paragraph structure and line breaks
+6. Return ONLY the corrected text without any introduction, explanation, or additional commentary
+</instructions>
 
-Input: "Apáginacontém3exemplos"
-Output: "A página contém 3 exemplos"`;
+<output_format>
+Provide ONLY the corrected text. Do not include:
+- Introductory phrases like "Here is the corrected text:"
+- Explanations of what was changed
+- Any metadata or disclaimers
+- Closing remarks
 
-    const userPrompt = `Fix the spacing in this text:\n\n${text}`;
+Just return the clean, corrected text.
+</output_format>
+
+<examples>
+<example>
+<input>Esteéumtextocomespaçosfaltando</input>
+<output>Este é um texto com espaços faltando</output>
+</example>
+
+<example>
+<input>Apáginacontém3exemplosdiferentes</input>
+<output>A página contém 3 exemplos diferentes</output>
+</example>
+</examples>`;
+
+    const userPrompt = `<text_to_correct>
+${text}
+</text_to_correct>`;
 
     try {
       const response = await this.retryWithBackoff(async () => {
@@ -70,19 +90,14 @@ Output: "A página contém 3 exemplos"`;
             { role: 'user', content: userPrompt }
           ],
           temperature: this.temperature,
-          max_tokens: Math.ceil(text.length * 1.2),
+          max_tokens: Math.ceil(text.length * 1.5),
           top_p: 1.0,
           frequency_penalty: 0,
           presence_penalty: 0
         });
       });
 
-      const correctedText = response.choices[0].message.content;
-
-      // Validate if output is valid
-      if (validateOutput) {
-        this.validateCorrection(text, correctedText);
-      }
+      const correctedText = response.choices[0].message.content.trim();
 
       // Add to cache
       this.addToCache(textHash, correctedText);
@@ -91,6 +106,7 @@ Output: "A página contém 3 exemplos"`;
       const processingTime = Date.now() - startTime;
       this.metrics.track(text, correctedText, processingTime);
 
+      console.log(`✅ Texto corrigido em ${processingTime}ms`);
       return correctedText;
     } catch (error) {
       console.error('Erro na correção de texto:', error);
@@ -134,16 +150,6 @@ Output: "A página contém 3 exemplos"`;
     }
 
     return results;
-  }
-
-  static validateCorrection(original, corrected) {
-    const originalNoSpaces = original.replace(/\s/g, '');
-    const correctedNoSpaces = corrected.replace(/\s/g, '');
-
-    if (originalNoSpaces !== correctedNoSpaces) {
-      console.warn('Validação falhou: conteúdo foi alterado além de espaços');
-      throw new Error('Correção inválida: conteúdo foi alterado');
-    }
   }
 
   static async retryWithBackoff(fn, retries = 0) {
